@@ -1,0 +1,14 @@
+[SPDX:GPL-3.0-or-later](https://spdx.org/licenses/GPL-3.0-or-later.html)
+
+Copyright (c) 2022-2025, Wojciech Jarosz, with additions from Shaojie Jiao.
+All rights reserved.
+
+The code was original based on
+[Nori's Blender exporter](https://github.com/wjakob/nori/tree/master/ext/plugin),
+by Adrien Gruson, Delio Vicini, and Tizian Zeltner, but it has largely been
+rewritten now.
+
+The material conversion and export were initially adapted from the
+[Mitsuba 3 Blender Add-on](https://github.com/mitsuba-renderer/mitsuba-blender),
+Copyright (c) 2022, Baptiste Nicolet <baptiste.nicolet@epfl.ch>, released under
+the 3-Clause License.

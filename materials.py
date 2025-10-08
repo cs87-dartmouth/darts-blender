@@ -157,7 +157,7 @@ def convert_glass_material(ctx, node):
             }
         )
     else:
-        params["type"] = "thin dielectric" if ior == 1.0 else "dielectric"
+        params["type"] = "dielectric"
 
     params["ior"] = ior
     params["reflectance"] = params["transmittance"] = textures.convert_texture_node(
@@ -186,7 +186,7 @@ def convert_emission_material(ctx, node):
 
     if np.sum(radiance) == 0:
         ctx.report(
-            {"WARN"},
+            {"WARNING"},
             "  Emitter has zero emission, this may cause Darts to fail! Creating a 'diffuse' material instead.",
         )
         return {"type": "diffuse", "color": ctx.color(0)}

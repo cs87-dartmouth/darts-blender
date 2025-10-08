@@ -5,6 +5,8 @@ import numpy as np
 def convert_area_light(ctx, b_light):
     params = {}
 
+    exposure = pow(2.0, b_light.data.exposure) if hasattr(b_light.data, 'exposure') else 1.0
+
     scale_mat = Matrix.Scale(1, 4)
 
     # Compute area
@@ -16,7 +18,7 @@ def convert_area_light(ctx, b_light):
              if b_light.data.shape == 'RECTANGLE'
              else b_light.data.size)
         params['size'] = [x, y]
-        area = x*y * b_light.scale.x * b_light.scale.y
+        area = x*y# * b_light.scale.x * b_light.scale.y
 
     elif b_light.data.shape == 'DISK' or b_light.data.shape == 'ELLIPSE':
         params['type'] = 'disk'
@@ -45,35 +47,49 @@ def convert_area_light(ctx, b_light):
     conv_fac = 1.0 / (area * 4.0)
     params['material'] = {
         'type': 'emission',
-        'color': ctx.color(conv_fac * b_light.data.energy * b_light.data.color)
+        'color': ctx.color(conv_fac * b_light.data.energy * b_light.data.color * exposure)
     }
 
     return params
 
 
 def convert_point_light(ctx, b_light):
+    exposure = pow(2.0, b_light.data.exposure) if hasattr(b_light.data, 'exposure') else 1.0
+
+    conv_fac = 1.0
+    if b_light.data.normalize :
+        conv_fac = 1.0 if b_light.data.shadow_soft_size == 0 else 0.5 # Blender uses a different normalization for lights with radius 0
+    else:
+        conv_fac = 4.0 if b_light.data.shadow_soft_size == 0 else 4.0 * (np.pi * pow(b_light.data.shadow_soft_size, 2)) #
+
     params = {'type': 'point light'}
     params['radius'] = b_light.data.shadow_soft_size
-    params['transform'] = {'translate': list(b_light.location)}
-    params['power'] = ctx.color(b_light.data.energy * b_light.data.color)
+    params['transform'] = ctx.transform_matrix(b_light.matrix_world)
+    params['power'] = ctx.color(b_light.data.energy * b_light.data.color * exposure)
+    
     return params
 
 
 def convert_sun_light(ctx, b_light):
+    exposure = pow(2.0, b_light.data.exposure) if hasattr(b_light.data, 'exposure') else 1.0
+
     params = {'type': 'sun light'}
     params['angle'] = np.rad2deg(b_light.data.angle / 2.0)
-    params['irradiance'] = ctx.color(b_light.data.energy * b_light.data.color)
+    params['irradiance'] = ctx.color(b_light.data.energy * b_light.data.color * exposure)
     params['transform'] = ctx.transform_matrix(b_light.matrix_world)
     return params
 
 
 def convert_spot_light(ctx, b_light):
+    exposure = pow(2.0, b_light.data.exposure) if hasattr(b_light.data, 'exposure') else 1.0
+
     params = {'type': 'spot light'}
     params['radius'] = b_light.data.shadow_soft_size
-    params['power'] = ctx.color(b_light.data.energy * b_light.data.color)
+    params['power'] = ctx.color(conv_fac * b_light.data.energy * b_light.data.color * exposure)
     params['cutoff angle'] = np.rad2deg(b_light.data.spot_size / 2.0)
     params['cutoff blur'] = b_light.data.spot_blend
     params['transform'] = ctx.transform_matrix(b_light.matrix_world)
+
     return params
 
 

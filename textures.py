@@ -2,6 +2,11 @@ import numpy as np
 from mathutils import Matrix
 from collections.abc import Iterable
 import os
+import sys
+try:
+    import OpenColorIO as ocio  # Blender typically bundles OCIO
+except Exception:
+    ocio = None
 
 
 def dummy_color(ctx):
@@ -15,6 +20,67 @@ def export_image(ctx, image):
 
     image : The Blender Image object
     """
+    def convert_image_to_colorspace(ctx, image, target_cs="sRGB"):
+        if ocio is None:
+            ctx.report(
+                {"WARNING"},
+                f"OpenColorIO not available, cannot convert '{image.name}' from {image.colorspace_settings.name} to {target_cs}.",
+            )
+            return
+
+        src_cs = image.colorspace_settings.name
+        if src_cs == target_cs:
+            return
+
+        try:
+            # Build processor from source colorspace name to target
+            # API differences between OCIO versions are handled with try/except
+            try:
+                config = ocio.GetCurrentConfig()
+            except Exception:
+                config = ocio.Config().GetCurrentConfig() if hasattr(ocio.Config, "GetCurrentConfig") else ocio.Config()
+
+            proc = config.getProcessor(src_cs, target_cs)
+            cpu = proc.getDefaultCPUProcessor()
+        except Exception as e:
+            ctx.report(
+                {"WARNING"},
+                f"Could not create OCIO processor to convert '{image.name}' from {src_cs} to {target_cs}: {e}",
+            )
+            return
+
+        # Ensure pixels are loaded
+        if not image.has_data:
+            try:
+                image.pixels[:]  # force load
+            except Exception:
+                pass
+
+        # Convert pixel data (flat RGBA floats 0..1)
+        try:
+            px = np.array(image.pixels[:], dtype=np.float32)
+            if px.size % 4 != 0:
+                raise RuntimeError("Unexpected pixel array length")
+            px = px.reshape((-1, 4))
+            # apply conversion per-pixel on RGB channels
+            # cpu.applyRGB expects a 3-tuple or list and returns converted 3-tuple
+            for i in range(px.shape[0]):
+                r, g, b = px[i, 0], px[i, 1], px[i, 2]
+                try:
+                    nr, ng, nb = cpu.applyRGB((r, g, b))
+                except AttributeError:
+                    # Older/newer OCIO bindings may expose applyRGB differently
+                    nr, ng, nb = cpu.applyRGB([r, g, b])
+                px[i, 0], px[i, 1], px[i, 2] = nr, ng, nb
+            # write back
+            image.pixels[:] = px.flatten().tolist()
+            image.colorspace_settings.name = target_cs
+        except Exception as e:
+            ctx.report(
+                {"WARNING"},
+                f"Failed to convert pixels for '{image.name}': {e}",
+            )
+            return
 
     texture_exts = {
         "BMP": ".bmp",
@@ -31,6 +97,14 @@ def export_image(ctx, image):
     convert_format = {"CINEON": "EXR", "DPX": "EXR", "TIFF": "PNG", "IRIS": "PNG"}
 
     textures_folder = os.path.join(ctx.directory, "textures")
+    # If image uses a color space Blender/Darts doesn't accept for color textures,
+    # convert it to sRGB before saving. Preserve non-color/linear/raw as-is.
+    if (
+        image.colorspace_settings.name not in ["Non-Color", "Raw", "Linear", "sRGB"]
+        and ctx.write_texture_files
+    ):
+        # convert to sRGB so saved texture is in the expected space for Darts
+        convert_image_to_colorspace(ctx, image, target_cs="sRGB")
     if image.file_format in convert_format:
         ctx.info(
             f"Image format of '{image.name}' is not supported. Converting it to {convert_format[image.file_format]}."
@@ -514,6 +588,19 @@ def convert_coord_texture_node(ctx, out_socket):
     return {"type": "coord", "coordinate": out_socket.name.lower()}
 
 
+def convert_uv_map_node(ctx, out_socket):
+    """
+    Python API: https://docs.blender.org/api/latest/bpy.types.ShaderNodeUVMap.html
+    User docs: https://docs.blender.org/manual/en/latest/render/shader_nodes/input/uv_map.html
+    """
+    if not ctx.enable_coord:
+        return dummy_color(ctx)
+
+    node = out_socket.node
+
+    return {"type": "coord", "coordinate": "uv"}
+
+
 def convert_mapping_node(ctx, out_socket):
     """
     Python API: https://docs.blender.org/api/latest/bpy.types.ShaderNodeMapping.html
@@ -681,6 +768,7 @@ def convert_texture_node(ctx, socket):
         "ShaderNodeClamp": convert_clamp_node,
         "ShaderNodeTexChecker": convert_checker_texture_node,
         "ShaderNodeTexCoord": convert_coord_texture_node,
+        "ShaderNodeUVMap": convert_uv_map_node,
         "ShaderNodeTexEnvironment": convert_environment_texture_node,
         "ShaderNodeMapping": convert_mapping_node,
         "ShaderNodeFresnel": convert_fresnel_node,

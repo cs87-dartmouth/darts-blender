@@ -1,8 +1,6 @@
 import os
 import bpy
-
-# from mathutils import Matrix, Vector, Euler
-
+import numpy as np
 
 def write_obj(ctx, obj_name):
     """Export meshes to "meshes/" and then point to them in the scene file"""
@@ -81,44 +79,46 @@ def write_meshes(ctx, meshes, obj_name):
 
     return obj_json
 
-
-def export(ctx, objects):
+def export(ctx, meshable_objects):
     if not os.path.exists(ctx.directory + "/meshes"):
         os.makedirs(ctx.directory + "/meshes")
 
     surfaces_json = []
-    if ctx.mesh_mode == "SINGLE":
-        ctx.info("Exporting a single scene-wide OBJ file.")
-        obj_name, _ = os.path.splitext(ctx.filepath)
-        obj_name = os.path.basename(obj_name)
-        surfaces_json.append(write_meshes(ctx, objects, obj_name))
-    else:
-        ctx.info("Exporting each Blender object as a separate OBJ file.")
-        for object in objects:
+    
+    # Only process mesh objects if they exist
+    if meshable_objects:
+        if ctx.mesh_mode == "SINGLE":
+            ctx.info("Exporting a single scene-wide OBJ file.")
+            obj_name, _ = os.path.splitext(ctx.filepath)
+            obj_name = os.path.basename(obj_name)
+            surfaces_json.append(write_meshes(ctx, meshable_objects, obj_name))
+        else:
+            ctx.info("Exporting each Blender object as a separate OBJ file.")
+            for object in meshable_objects:
 
-            # write_obj by default exports meshes in world coordinates
-            # to save in local coordinates we temporarily transform all vertices by the inverse of matrix_world
-            to_world = object.matrix_world.copy()
+                # write_obj by default exports meshes in world coordinates
+                # to save in local coordinates we temporarily transform all vertices by the inverse of matrix_world
+                to_world = object.matrix_world.copy()
 
-            # save and turn off constraints
-            influences = []
-            for i, c in enumerate(object.constraints):
-                influences.append(c.influence)
-                c.influence = 0.0
+                # save and turn off constraints
+                influences = []
+                for i, c in enumerate(object.constraints):
+                    influences.append(c.influence)
+                    c.influence = 0.0
 
-            object.matrix_world.identity()
+                object.matrix_world.identity()
 
-            bpy.context.view_layer.update()
+                bpy.context.view_layer.update()
 
-            params = write_meshes(ctx, [object], object.name)
-            params["transform"] = ctx.transform_matrix(to_world)
+                params = write_meshes(ctx, [object], object.name)
+                params["transform"] = ctx.transform_matrix(to_world)
 
-            object.matrix_world = to_world
-            for i, c in enumerate(object.constraints):
-                c.influence = influences[i]
+                object.matrix_world = to_world
+                for i, c in enumerate(object.constraints):
+                    c.influence = influences[i]
 
-            bpy.context.view_layer.update()
+                bpy.context.view_layer.update()
 
-            surfaces_json.append(params)
+                surfaces_json.append(params)
 
     return surfaces_json

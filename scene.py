@@ -19,17 +19,9 @@ import numpy as np
 from . import materials
 from . import textures
 from . import lights
-from . import geometry
+from . import meshes
+from . import nurbs
 from . import camera
-
-SUPPORTED_TYPES = {
-    "MESH",
-    "CURVE",
-    "FONT",
-    "META",
-    "EMPTY",
-    "SURFACE",
-}  # Surface types we support
 
 BLENDER_VERSION = f"{bpy.app.version[0]}.{bpy.app.version[1]}"
 
@@ -45,6 +37,7 @@ class SceneWriter:
         report,
         filepath,
         write_obj_files,
+        write_nurbs,
         write_texture_files,
         verbose,
         use_selection,
@@ -84,6 +77,7 @@ class SceneWriter:
         self.report = report
 
         self.write_obj_files = write_obj_files
+        self.write_nurbs = write_nurbs
 
         self.verbose = verbose
         self.use_selection = use_selection
@@ -432,17 +426,33 @@ class SceneWriter:
         if self.use_visibility:
             objects = [o for o in objects if o.visible_get()]
 
-        b_surfaces = [o for o in objects if o.type in SUPPORTED_TYPES]
-        b_volumes = [o for o in objects if o.type in "VOLUME"]
+        MESHABLE_TYPES = {
+            "MESH",
+            "CURVE",
+            "FONT",
+            "META",
+            "EMPTY",
+        }  # Surface types we support
+
+        b_meshables = [o for o in objects if o.type in MESHABLE_TYPES]
+        b_nurbs = [o for o in objects if o.type == "SURFACE"]
+        b_volumes = [o for o in objects if o.type == "VOLUME"]
 
         # export the materials
-        mats, media = materials.export(self, b_surfaces)
+        material_objects = b_meshables[:]
+        if self.write_nurbs:
+            material_objects.extend(b_nurbs)
+        mats, media = materials.export(self, material_objects)
 
         data_all["media"].extend(media)
         data_all["materials"] = mats
 
         # export meshes
-        data_all["surfaces"] = geometry.export(self, b_surfaces)
+        data_all["surfaces"] = meshes.export(self, b_meshables)
+
+        # add nurbs
+        if self.write_nurbs:
+            data_all["surfaces"].extend(nurbs.export(self, b_nurbs))
 
         # add the volumes
         data_all["surfaces"].extend(self.export_volumes(b_volumes))

@@ -37,7 +37,6 @@ class SceneWriter:
         report,
         filepath,
         write_obj_files,
-        write_nurbs,
         write_texture_files,
         verbose,
         use_selection,
@@ -46,6 +45,7 @@ class SceneWriter:
         sampler,
         use_lights,
         mesh_mode,
+        nurbs_mode,
         material_mode,
         glossy_mode,
         use_normal_maps,
@@ -77,7 +77,6 @@ class SceneWriter:
         self.report = report
 
         self.write_obj_files = write_obj_files
-        self.write_nurbs = write_nurbs
 
         self.verbose = verbose
         self.use_selection = use_selection
@@ -88,6 +87,7 @@ class SceneWriter:
         self.use_lights = use_lights
 
         self.mesh_mode = mesh_mode
+        self.nurbs_mode = nurbs_mode
 
         self.material_mode = material_mode
         self.write_texture_files = write_texture_files
@@ -264,7 +264,9 @@ class SceneWriter:
 
             # write the bounding box's material
             if not volume.data or not volume.data.materials:
-                raise NotImplementedError("Cannot find data or material for volume. You must assign a material to the volume object.")
+                raise NotImplementedError(
+                    "Cannot find data or material for volume. You must assign a material to the volume object."
+                )
 
             self.info(
                 f"Volume '{volume.name_full}' has {len(volume.data.materials)} materials."
@@ -438,10 +440,13 @@ class SceneWriter:
         b_nurbs = [o for o in objects if o.type == "SURFACE"]
         b_volumes = [o for o in objects if o.type == "VOLUME"]
 
+        if self.nurbs_mode == "OBJS":
+            b_meshables.extend(b_nurbs)
+            b_nurbs = []
+
         # export the materials
         material_objects = b_meshables[:]
-        if self.write_nurbs:
-            material_objects.extend(b_nurbs)
+        material_objects.extend(b_nurbs)
         mats, media = materials.export(self, material_objects)
 
         data_all["media"].extend(media)
@@ -450,8 +455,8 @@ class SceneWriter:
         # export meshes
         data_all["surfaces"] = meshes.export(self, b_meshables)
 
-        # add nurbs
-        if self.write_nurbs:
+        # add nurbs (export function handles both PATCHES and NURBS modes)
+        if self.nurbs_mode in ["PATCHES", "NURBS"]:
             data_all["surfaces"].extend(nurbs.export(self, b_nurbs))
 
         # add the volumes

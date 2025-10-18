@@ -26,7 +26,7 @@ if _needs_reload:
 bl_info = {
     "name": "Darts",
     "author": "Wojciech Jarosz",
-    "version": (1, 2, 0),
+    "version": (1, 3, 0),
     "blender": (2, 80, 0),
     "location": "File > Export > Darts exporter (.json)",
     "description": "Export Darts scene format (.json)",

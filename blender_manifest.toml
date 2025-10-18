@@ -3,7 +3,7 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "Darts"
-version = "1.2.0"
+version = "1.3.0"
 name = "Darts"
 tagline = "Export Darts scene format (.json)"
 maintainer = "Wojciech Jarosz"
